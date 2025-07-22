@@ -3,24 +3,22 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+// App.tsx에서 사용하는 ProjectRequest 타입과 일치하도록 수정
 interface ProjectRequest {
   id: string;
   title: string;
-  category: string;
   description: string;
-  budget: {
-    min: number;
-    max: number;
-  };
+  budget: number;
   deadline: string;
-  requirements: string[];
-  attachments: File[];
-  status: 'open' | 'in-progress' | 'completed' | 'cancelled' | 'pending-designer' | 'designer-questions';
-  createdDate: string;
-  rushRequest?: boolean;
-  additionalConcepts?: number;
-  additionalRevisions?: number;
-  totalPrice?: number;
+  status: 'open' | 'in-progress' | 'completed' | 'cancelled';
+  clientId: string;
+  assignedDesigner?: string;
+  createdAt: string;
+  isRush?: boolean;
+  rushFee?: number;
+  premiumConcepts?: number;
+  premiumRevisions?: number;
+  selectedForm?: string;
 }
 
 interface ProjectAcceptRejectModalProps {
@@ -29,6 +27,7 @@ interface ProjectAcceptRejectModalProps {
   onAccept: (projectId: string, message?: string) => void;
   onReject: (projectId: string, reason: string) => void;
   project: ProjectRequest;
+  designer?: any; // 선택적으로 디자이너 정보
 }
 
 export default function ProjectAcceptRejectModal({
@@ -36,7 +35,8 @@ export default function ProjectAcceptRejectModal({
   onClose,
   onAccept,
   onReject,
-  project
+  project,
+  designer
 }: ProjectAcceptRejectModalProps) {
   const [decision, setDecision] = useState<'accept' | 'reject' | null>(null);
   const [message, setMessage] = useState('');
@@ -141,120 +141,81 @@ export default function ProjectAcceptRejectModal({
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                   {/* 왼쪽: 프로젝트 정보 */}
                   <div className="space-y-6">
-                    <div>
-                      <h3 className="mb-4">📋 프로젝트 상세 정보</h3>
-                      <div className="simple-card p-6">
-                        <div className="liquid-glass-bg-hover"></div>
-                        <div className="relative z-10 space-y-4">
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <span className="text-tertiary text-sm">카테고리</span>
-                              <p className="font-medium">{project.category}</p>
-                            </div>
-                            <div>
-                              <span className="text-tertiary text-sm">마감일</span>
-                              <p className={`font-medium ${daysUntilDeadline <= 3 ? 'text-red-400' : daysUntilDeadline <= 7 ? 'text-yellow-400' : 'text-green-400'}`}>
-                                {new Date(project.deadline).toLocaleDateString('ko-KR')}
-                                <span className="text-xs text-tertiary ml-2">
-                                  ({daysUntilDeadline}일 남음)
-                                </span>
-                              </p>
-                            </div>
+                    <div className="simple-card p-6">
+                      <div className="liquid-glass-bg-hover"></div>
+                      <div className="relative z-10">
+                        <h3 className="mb-4">📋 프로젝트 상세정보</h3>
+                        <div className="space-y-4">
+                          <div>
+                            <h4 className="font-medium text-white">{project.title}</h4>
+                            <p className="text-secondary text-sm mt-2">{project.description}</p>
                           </div>
 
-                          <div>
-                            <span className="text-tertiary text-sm">예산 범위</span>
-                            <div className="flex items-center space-x-2">
-                              <p className="text-lg font-semibold">${project.budget.min} - ${project.budget.max}</p>
-                              {project.totalPrice && project.totalPrice > project.budget.max && (
-                                <span className="text-xs bg-green-400/20 text-green-400 px-2 py-1 rounded-full">
-                                  +추가 옵션: ${project.totalPrice}
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-tertiary text-xs">예산</p>
+                              <p className="text-white font-medium">${project.budget}</p>
+                            </div>
+                            <div>
+                              <p className="text-tertiary text-xs">마감일</p>
+                              <p className="text-white font-medium">
+                                {new Date(project.deadline).toLocaleDateString('ko-KR')}
+                              </p>
+                              {daysUntilDeadline <= 7 && (
+                                <span className="text-red-400 text-xs">
+                                  ({daysUntilDeadline}일 남음)
                                 </span>
                               )}
                             </div>
                           </div>
 
-                          {/* 추가 옵션들 */}
-                          {(project.rushRequest || project.additionalConcepts || project.additionalRevisions) && (
-                            <div>
-                              <span className="text-tertiary text-sm">추가 요청 사항</span>
-                              <div className="space-y-2 mt-2">
-                                {project.rushRequest && (
-                                  <div className="flex items-center space-x-2 p-2 bg-orange-400/10 rounded-lg border border-orange-400/20">
-                                    <svg className="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    <span className="text-sm text-orange-400">급한 마감 (+50% 추가 요금)</span>
-                                  </div>
-                                )}
-                                {project.additionalConcepts && project.additionalConcepts > 0 && (
-                                  <div className="flex items-center space-x-2 p-2 bg-blue-400/10 rounded-lg border border-blue-400/20">
-                                    <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                                    </svg>
-                                    <span className="text-sm text-blue-400">추가 시안 {project.additionalConcepts}개 (+${project.additionalConcepts * 50})</span>
-                                  </div>
-                                )}
-                                {project.additionalRevisions && project.additionalRevisions > 0 && (
-                                  <div className="flex items-center space-x-2 p-2 bg-purple-400/10 rounded-lg border border-purple-400/20">
-                                    <svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                    </svg>
-                                    <span className="text-sm text-purple-400">추가 수정 {project.additionalRevisions}회 (+${project.additionalRevisions * 25})</span>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
-
-                          <div>
-                            <span className="text-tertiary text-sm">프로젝트 설명</span>
-                            <p className="text-secondary text-sm mt-1 leading-relaxed">{project.description}</p>
-                          </div>
-
-                          {project.requirements.length > 0 && (
-                            <div>
-                              <span className="text-tertiary text-sm">요구사항</span>
-                              <ul className="space-y-1 mt-2">
-                                {project.requirements.map((req, index) => (
-                                  <li key={index} className="flex items-start space-x-2 text-sm text-secondary">
-                                    <span className="text-green-400 mt-1">•</span>
-                                    <span>{req}</span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-
-                          {project.attachments.length > 0 && (
-                            <div>
-                              <span className="text-tertiary text-sm">첨부 파일</span>
-                              <div className="space-y-2 mt-2">
-                                {project.attachments.map((file, index) => (
-                                  <div key={index} className="flex items-center space-x-2 p-2 bg-white/5 rounded-lg">
-                                    <svg className="w-4 h-4 text-gray-medium" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                                    </svg>
-                                    <span className="text-sm text-secondary">{file.name}</span>
-                                  </div>
-                                ))}
-                              </div>
+                          {project.isRush && (
+                            <div className="bg-yellow-400/10 p-3 rounded-lg border border-yellow-400/20">
+                              <p className="text-yellow-400 text-sm">
+                                🚀 급한 프로젝트 (+${project.rushFee || 0} 추가)
+                              </p>
                             </div>
                           )}
                         </div>
                       </div>
                     </div>
+
+                    <div className="simple-card p-6">
+                      <div className="liquid-glass-bg-hover"></div>
+                      <div className="relative z-10">
+                        <h3 className="mb-4">💰 예상 수익</h3>
+                        <div className="space-y-3">
+                          <div className="flex justify-between">
+                            <span className="text-secondary">기본 프로젝트</span>
+                            <span className="text-white">${project.budget}</span>
+                          </div>
+                          {project.rushFee && (
+                            <div className="flex justify-between">
+                              <span className="text-secondary">급한 작업 추가</span>
+                              <span className="text-yellow-400">+${project.rushFee}</span>
+                            </div>
+                          )}
+                          <div className="border-t border-white/10 pt-3">
+                            <div className="flex justify-between font-medium">
+                              <span className="text-white">총 예상 수익</span>
+                              <span className="text-green-400">${project.budget + (project.rushFee || 0)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
-                  {/* 오른쪽: 의사 결정 */}
+                  {/* 오른쪽: 결정 인터페이스 */}
                   <div className="space-y-6">
                     {!decision && (
-                      <div>
-                        <h3 className="mb-4">🤔 결정해주세요</h3>
-                        <div className="space-y-4">
+                      <div className="space-y-4">
+                        <h3 className="mb-4">🎯 어떻게 하시겠습니까?</h3>
+                        
+                        <div className="space-y-3">
                           <motion.button
                             onClick={() => setDecision('accept')}
-                            className="w-full p-6 border-2 border-green-400/30 bg-green-400/10 rounded-xl hover:bg-green-400/20 transition-colors"
+                            className="w-full p-6 bg-green-400/10 border border-green-400/20 rounded-lg hover:bg-green-400/20 transition-colors"
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
                           >
@@ -264,14 +225,14 @@ export default function ProjectAcceptRejectModal({
                               </svg>
                               <div className="text-center">
                                 <h4 className="text-green-400 font-semibold">✅ 프로젝트 수락하기</h4>
-                                <p className="text-green-400/80 text-sm mt-1">이 프로젝트를 맡아서 진행하겠습니다</p>
+                                <p className="text-green-400/80 text-sm mt-1">이 프로젝트를 맡아 작업하겠습니다</p>
                               </div>
                             </div>
                           </motion.button>
 
                           <motion.button
                             onClick={() => setDecision('reject')}
-                            className="w-full p-6 border-2 border-red-400/30 bg-red-400/10 rounded-xl hover:bg-red-400/20 transition-colors"
+                            className="w-full p-6 bg-red-400/10 border border-red-400/20 rounded-lg hover:bg-red-400/20 transition-colors"
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
                           >
