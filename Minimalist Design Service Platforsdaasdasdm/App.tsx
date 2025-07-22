@@ -41,7 +41,8 @@ import EnhancedProjectRequestModal from './components/EnhancedProjectRequestModa
 import PublicProjectBoardModal from './components/PublicProjectBoardModal';
 
 // 유틸리티 임포트들
-import { portfolioItems, designerProfiles, testAccounts } from './utils/mockData';
+import { portfolioItems, designerProfiles } from './utils/mockData';
+import { TEST_ACCOUNTS } from './utils/testAccounts';
 import { supabase, signInWithEmail, signUpWithEmail, signOut } from './utils/supabase';
 
 // ========================================
@@ -222,26 +223,34 @@ export default function App() {
   const [orders, setOrders] = useState<Order[]>([]);                   // 사용자 주문 목록
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);  // 사용자 구독 목록
   const [revisionRequests, setRevisionRequests] = useState<RevisionRequest[]>([]);  // 수정 요청 목록
-  const [projectRequests, setProjectRequests] = useState<ProjectRequest[]>([]);      // 프로젝트 요청 목록
+  const [projectRequests, setProjectRequests] = useState<ProjectRequest[]>([]);    // 프로젝트 요청 목록
   const [designerQuestions, setDesignerQuestions] = useState<DesignerQuestion[]>([]);  // 디자이너 질문 목록
-  const [customForms, setCustomForms] = useState<CustomForm[]>([]);    // 커스텀 폼 목록
+  const [customForms, setCustomForms] = useState<CustomForm[]>([]);     // 커스텀 폼 목록
   const [publicProjects, setPublicProjects] = useState<PublicProject[]>([]);  // 공개 프로젝트 목록
 
-  // 모달 상태들 (각 모달의 열림/닫힘 상태 관리)
-  const [isStyleSelectionOpen, setIsStyleSelectionOpen] = useState(false);
-  const [isRevisionRequestOpen, setIsRevisionRequestOpen] = useState(false);
-  const [isProjectRequestOpen, setIsProjectRequestOpen] = useState(false);
-  const [isDesignerQuestionOpen, setIsDesignerQuestionOpen] = useState(false);
-  const [isProjectAcceptRejectOpen, setIsProjectAcceptRejectOpen] = useState(false);
-  const [isCustomFormCreatorOpen, setIsCustomFormCreatorOpen] = useState(false);
-  const [isEnhancedProjectRequestOpen, setIsEnhancedProjectRequestOpen] = useState(false);
-  const [isPublicProjectBoardOpen, setIsPublicProjectBoardOpen] = useState(false);
-
-  // 모달에서 사용할 선택된 항목들
+  // 모달 상태들
+  const [isStyleSelectionOpen, setIsStyleSelectionOpen] = useState(false);  // 스타일 선택 모달
   const [selectedProductForPurchase, setSelectedProductForPurchase] = useState<PortfolioItem | null>(null);
+
+  // 수정 요청 모달 상태들
+  const [isRevisionRequestOpen, setIsRevisionRequestOpen] = useState(false);  // 수정 요청 모달
   const [selectedOrderForRevision, setSelectedOrderForRevision] = useState<Order | null>(null);
+
+  // 프로젝트 요청 모달 상태들 (레거시 - 기본 버전)
+  const [isProjectRequestOpen, setIsProjectRequestOpen] = useState(false);  // 기본 프로젝트 요청 모달
+
+  // 새로운 디자이너 기능 모달들
+  const [isDesignerQuestionOpen, setIsDesignerQuestionOpen] = useState(false);  // 디자이너 질문 모달
   const [selectedProjectForQuestions, setSelectedProjectForQuestions] = useState<ProjectRequest | null>(null);
+
+  const [isProjectAcceptRejectOpen, setIsProjectAcceptRejectOpen] = useState(false);  // 프로젝트 수락/거절 모달
   const [selectedProjectForDecision, setSelectedProjectForDecision] = useState<ProjectRequest | null>(null);
+
+  const [isCustomFormCreatorOpen, setIsCustomFormCreatorOpen] = useState(false);  // 커스텀 폼 생성 모달
+
+  const [isEnhancedProjectRequestOpen, setIsEnhancedProjectRequestOpen] = useState(false);  // 향상된 프로젝트 요청 모달
+
+  const [isPublicProjectBoardOpen, setIsPublicProjectBoardOpen] = useState(false);  // 공개 프로젝트 게시판 모달
 
   // 인증 관련 상태들
   const [authLoading, setAuthLoading] = useState(false);               // 인증 처리 중 로딩 상태
@@ -428,16 +437,18 @@ export default function App() {
 
     try {
       // 테스트 계정 확인
-      const testAccount = testAccounts.find(account => account.email === email);
+      const testAccount = TEST_ACCOUNTS.find(account => account.email === email);
       
       if (testAccount && password === 'test123') {
         // 테스트 계정으로 로그인
         const userData: User = {
-          id: testAccount.id,
+          id: testAccount.email,
           email: testAccount.email,
           role: testAccount.role,
-          name: testAccount.name,
-          avatar: testAccount.avatar
+          name: testAccount.displayName,
+          avatar: testAccount.role === 'designer' ? 
+            `https://images.unsplash.com/photo-${Math.random() > 0.5 ? '1535713875002-d1d0cf227877' : '1472099645785-5658abf4ff4e'}?w=200&h=200&fit=crop&crop=face`
+            : 'https://images.unsplash.com/photo-1535713875002-d1d0cf227877?w=200&h=200&fit=crop&crop=face'
         };
         
         setUser(userData);
@@ -607,7 +618,7 @@ export default function App() {
 
     setRevisionRequests(prev => [newRevision, ...prev]);
     
-    // 주문의 남은 수정 횟수 감소
+    // 주문의 수정 횟수 차감
     setOrders(prev => prev.map(order => 
       order.id === orderId 
         ? { ...order, remainingRevisions: Math.max(0, order.remainingRevisions - 1) }
@@ -686,19 +697,25 @@ export default function App() {
   };
 
   // 프로젝트 수락 핸들러
-  const handleProjectAccept = (projectId: string, message: string) => {
+  const handleProjectAccept = (projectId: string, message?: string) => {
     setProjectRequests(prev => prev.map(project =>
       project.id === projectId
-        ? { ...project, status: 'in-progress', assignedDesigner: user?.name }
+        ? { ...project, status: 'in-progress' as const, assignedDesigner: user?.id }
         : project
     ));
+
     setIsProjectAcceptRejectOpen(false);
     setSelectedProjectForDecision(null);
   };
 
   // 프로젝트 거절 핸들러
   const handleProjectReject = (projectId: string, reason: string) => {
-    // 프로젝트 상태는 open으로 유지 (다른 디자이너가 수락할 수 있도록)
+    setProjectRequests(prev => prev.map(project =>
+      project.id === projectId
+        ? { ...project, status: 'cancelled' as const }
+        : project
+    ));
+
     setIsProjectAcceptRejectOpen(false);
     setSelectedProjectForDecision(null);
   };
@@ -720,7 +737,7 @@ export default function App() {
 
   // 공개 프로젝트 생성 핸들러
   const handlePublicProjectCreate = (projectData: any) => {
-    const newPublicProject: PublicProject = {
+    const newProject: PublicProject = {
       id: Date.now().toString(),
       title: projectData.title,
       description: projectData.description,
@@ -732,7 +749,7 @@ export default function App() {
       createdAt: new Date().toISOString()
     };
 
-    setPublicProjects(prev => [newPublicProject, ...prev]);
+    setPublicProjects(prev => [newProject, ...prev]);
   };
 
   // 프로젝트 제안 핸들러
@@ -808,114 +825,148 @@ export default function App() {
               <QuickLinks onNavigate={handleNavigation} />
               
               {/* 포트폴리오 그리드 섹션 */}
-              <section className="py-20">
-                <div className="container mx-auto px-8">
-                  <motion.div
-                    initial={{ opacity: 0, y: 30 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.6, delay: 0.4 }}
-                    className="space-y-12"
-                  >
-                    <h2 className="text-center">Featured Designs</h2>
-                    <div className="w-full">
-                      <PortfolioGrid
-                        items={(portfolioItems || []).slice(0, 12)}  // 처음 12개만 표시
-                        onItemClick={handleProductClick}
-                        onDesignerClick={handleDesignerClick}
-                        onLike={handleLike}
-                        onPurchase={handlePurchase}
-                        isLoggedIn={isLoggedIn}
-                      />
-                    </div>
-                  </motion.div>
-                </div>
-              </section>
+              <PortfolioGrid
+                items={portfolioItems || []}
+                onItemClick={handleProductClick}
+                onDesignerClick={handleDesignerClick}
+                onLike={handleLike}
+                onPurchase={handlePurchase}
+              />
             </motion.div>
           )}
 
           {/* === 제품 페이지들 === */}
-          
-          {/* 전체 제품 페이지 */}
           {currentSection === 'products' && (
-            <ProductsPage
+            <motion.div
               key="products"
-              items={portfolioItems || []}
-              onItemClick={handleProductClick}
-              onDesignerClick={handleDesignerClick}
-              onLike={handleLike}
-              onPurchase={handlePurchase}
-              isLoggedIn={isLoggedIn}
-            />
+              variants={premiumPageVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="pt-20"
+            >
+              <ProductsPage
+                items={portfolioItems || []}
+                onItemClick={handleProductClick}
+                onDesignerClick={handleDesignerClick}
+                onLike={handleLike}
+                onPurchase={handlePurchase}
+              />
+            </motion.div>
           )}
 
-          {/* 로고 디자인 페이지 */}
           {currentSection === 'logo-design' && (
-            <LogoDesignPage
+            <motion.div
               key="logo-design"
-              items={(portfolioItems || []).filter(item => item.category === 'Logo Design')} // 로고만 필터링
-              onItemClick={handleProductClick}
-              onDesignerClick={handleDesignerClick}
-              onLike={handleLike}
-              onPurchase={handlePurchase}
-              isLoggedIn={isLoggedIn}
-            />
+              variants={premiumPageVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="pt-20"
+            >
+              <LogoDesignPage
+                items={(portfolioItems || []).filter(item => item.category === 'Logo Design')}
+                onItemClick={handleProductClick}
+                onDesignerClick={handleDesignerClick}
+                onLike={handleLike}
+                onPurchase={handlePurchase}
+              />
+            </motion.div>
           )}
 
-          {/* 폰트 디자인 페이지 */}
           {currentSection === 'font-design' && (
-            <FontDesignPage
+            <motion.div
               key="font-design"
-              items={(portfolioItems || []).filter(item => item.category === 'Font Design')} // 폰트만 필터링
-              onItemClick={handleProductClick}
-              onDesignerClick={handleDesignerClick}
-              onLike={handleLike}
-              onPurchase={handlePurchase}
-              isLoggedIn={isLoggedIn}
-            />
+              variants={premiumPageVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="pt-20"
+            >
+              <FontDesignPage
+                items={(portfolioItems || []).filter(item => item.category === 'Font Design')}
+                onItemClick={handleProductClick}
+                onDesignerClick={handleDesignerClick}
+                onLike={handleLike}
+                onPurchase={handlePurchase}
+              />
+            </motion.div>
           )}
 
-          {/* 명함 디자인 페이지 */}
           {currentSection === 'business-cards' && (
-            <BusinessCardsPage
+            <motion.div
               key="business-cards"
-              items={(portfolioItems || []).filter(item => item.category === 'Business Card Design')} // 명함만 필터링
-              onItemClick={handleProductClick}
-              onDesignerClick={handleDesignerClick}
-              onLike={handleLike}
-              onPurchase={handlePurchase}
-              isLoggedIn={isLoggedIn}
-            />
+              variants={premiumPageVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="pt-20"
+            >
+              <BusinessCardsPage
+                items={(portfolioItems || []).filter(item => item.category === 'Business Card Design')}
+                onItemClick={handleProductClick}
+                onDesignerClick={handleDesignerClick}
+                onLike={handleLike}
+                onPurchase={handlePurchase}
+              />
+            </motion.div>
           )}
 
-          {/* 디자이너 목록 페이지 */}
+          {/* === 디자이너 관련 페이지들 === */}
           {currentSection === 'designers' && (
-            <DesignersPage
+            <motion.div
               key="designers"
-              designers={designerProfiles || []}
-              onDesignerClick={handleDesignerClick}
-              portfolioItems={portfolioItems || []}
-            />
+              variants={premiumPageVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="pt-20"
+            >
+              <DesignersPage
+                designers={designerProfiles || []}
+                onDesignerClick={handleDesignerClick}
+              />
+            </motion.div>
           )}
 
-          {/* === 디자이너 포트폴리오 상세 페이지 === */}
           {currentSection === 'designer-portfolio' && selectedDesigner && (
-            <DesignerPortfolioPage
-              key={`designer-${selectedDesigner}`} // 디자이너별 고유 키
-              designerName={selectedDesigner}           // 선택된 디자이너 이름
-              items={(portfolioItems || []).filter(item => item.designer === selectedDesigner)} // 해당 디자이너의 작품만
-              onItemClick={handleProductClick}          // 제품 클릭 핸들러
-              onLike={handleLike}                      // 좋아요 핸들러
-              onBack={handleBackToDesigners}            // 디자이너 목록으로 돌아가기 (수정됨)
-              onPurchase={handlePurchase}              // 구매 핸들러
-              isLoggedIn={isLoggedIn}                  // 로그인 상태
-            />
+            <motion.div
+              key="designer-portfolio"
+              variants={premiumPageVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="pt-20"
+            >
+              <DesignerPortfolioPage
+                designerName={selectedDesigner}
+                portfolioItems={(portfolioItems || []).filter(item => item.designer === selectedDesigner)}
+                onItemClick={handleProductClick}
+                onLike={handleLike}
+                onPurchase={handlePurchase}
+                onBack={handleBackToDesigners}
+              />
+            </motion.div>
+          )}
+
+          {currentSection === 'portfolio-upload' && (
+            <motion.div
+              key="portfolio-upload"
+              variants={premiumPageVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="pt-20"
+            >
+              <PortfolioUploadPage user={user} />
+            </motion.div>
           )}
 
           {/* === 제품 상세 페이지 === */}
           {currentSection === 'product-detail' && selectedProduct && (
             <motion.div
-              key={`product-${selectedProduct.id}`}   // 제품별 고유 키
-              variants={premiumPageVariants}          // 페이지 전환 애니메이션
+              key="product-detail"
+              variants={premiumPageVariants}
               initial="initial"
               animate="animate"
               exit="exit"
@@ -923,143 +974,95 @@ export default function App() {
             >
               <div className="container mx-auto px-8 py-16">
                 <motion.div
-                  className="max-w-4xl mx-auto"
+                  className="max-w-6xl mx-auto"
                   initial={{ opacity: 0, y: 30 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.6, delay: 0.2 }}
                 >
-                  {/* 뒤로가기 버튼 - z-index와 포커스 수정 */}
-                  <motion.button
-                    onClick={handleBackToProducts}
-                    className="standard-button mb-8 flex items-center gap-2 focus-none relative"
-                    style={{ zIndex: 1002 }}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                  >
-                    <div className="liquid-glass-bg-hover"></div>
-                    <span className="relative z-10">← Back to Products</span>
-                  </motion.button>
-
-                  {/* 제품 상세 내용 */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
                     {/* 제품 이미지 */}
-                    <motion.div
-                      className="aspect-[4/5] overflow-hidden rounded-2xl"
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ duration: 0.6, delay: 0.3 }}
-                    >
+                    <div className="relative">
                       <ImageWithFallback
                         src={selectedProduct.imageUrl}
                         alt={selectedProduct.title}
-                        className="w-full h-full object-cover"
+                        className="w-full h-[600px] object-cover rounded-lg"
                       />
-                    </motion.div>
+                    </div>
 
                     {/* 제품 정보 */}
-                    <motion.div
-                      className="space-y-8"
-                      initial={{ opacity: 0, x: 30 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.6, delay: 0.4 }}
-                    >
-                      {/* 기본 정보 */}
+                    <div className="space-y-8">
                       <div>
-                        <h1 className="mb-4">{selectedProduct.title}</h1>
-                        <div className="flex items-center gap-4 mb-4">
-                          <span className="text-secondary">by</span>
-                          <motion.button
-                            onClick={() => handleDesignerClick(selectedProduct.designer)}
-                            className="standard-button focus-none relative"
-                            style={{ zIndex: 1002 }}
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                          >
-                            <div className="liquid-glass-bg-hover"></div>
-                            <span className="relative z-10">{selectedProduct.designer}</span>
-                          </motion.button>
-                        </div>
-                        <p className="text-secondary text-lg">{selectedProduct.description}</p>
-                      </div>
-
-                      {/* 가격 및 액션 */}
-                      <div className="simple-card">
-                        <div className="liquid-glass-bg-hover"></div>
-                        <div className="relative z-10 p-6">
-                          <div className="flex items-center justify-between mb-6">
-                            <span className="text-3xl font-semibold">${selectedProduct.price}</span>
-                            <motion.button
-                              onClick={() => handleLike(selectedProduct.id)}
-                              className="heart-button-clean"
-                              whileHover={{ scale: 1.1 }}
-                              whileTap={{ scale: 0.9 }}
-                            >
-                              <div className="liquid-glass-bg-hover"></div>
-                              <span className="relative z-10 text-xl">
-                                {selectedProduct.isLiked ? '❤️' : '🤍'}
-                              </span>
-                            </motion.button>
-                          </div>
-                          
-                          <motion.button
-                            onClick={() => handlePurchase(selectedProduct)}
-                            className="primary-button-hover w-full mb-4 focus-none relative"
-                            style={{ zIndex: 1002 }}
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                          >
-                            <div className="liquid-glass-bg-hover"></div>
-                            <span className="relative z-10">Purchase Design</span>
-                          </motion.button>
-
-                          <motion.button
-                            onClick={() => setIsEnhancedProjectRequestOpen(true)}
-                            className="standard-button w-full focus-none relative"
-                            style={{ zIndex: 1002 }}
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                          >
-                            <div className="liquid-glass-bg-hover"></div>
-                            <span className="relative z-10">Request Custom Version</span>
-                          </motion.button>
+                        <h1 className="text-4xl font-bold mb-4">{selectedProduct.title}</h1>
+                        <p className="text-secondary text-lg mb-6">{selectedProduct.description}</p>
+                        <div className="flex items-center gap-4 mb-6">
+                          <span className="text-3xl font-bold">${selectedProduct.price}</span>
+                          <span className="text-secondary">by {selectedProduct.designer}</span>
                         </div>
                       </div>
 
-                      {/* 포함된 기능들 */}
                       {selectedProduct.features && (
-                        <div className="simple-card">
-                          <div className="liquid-glass-bg-hover"></div>
-                          <div className="relative z-10 p-6">
-                            <h4 className="mb-4">What's Included</h4>
-                            <ul className="space-y-2">
-                              {selectedProduct.features.map((feature, index) => (
-                                <li key={index} className="flex items-center gap-3">
-                                  <span className="text-green-400">✓</span>
-                                  <span className="text-secondary">{feature}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
+                        <div>
+                          <h3 className="text-xl font-semibold mb-4">포함된 기능</h3>
+                          <ul className="space-y-2">
+                            {selectedProduct.features.map((feature, index) => (
+                              <li key={index} className="flex items-center gap-3">
+                                <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                                <span className="text-secondary">{feature}</span>
+                              </li>
+                            ))}
+                          </ul>
                         </div>
                       )}
 
-                      {/* 태그들 */}
                       {selectedProduct.tags && (
                         <div>
-                          <h4 className="mb-4">Tags</h4>
+                          <h3 className="text-xl font-semibold mb-4">태그</h3>
                           <div className="flex flex-wrap gap-2">
                             {selectedProduct.tags.map((tag, index) => (
-                              <span
-                                key={index}
-                                className="px-3 py-1 bg-secondary/50 rounded-full text-secondary text-sm"
-                              >
+                              <span key={index} className="px-3 py-1 bg-white/10 rounded-full text-sm">
                                 {tag}
                               </span>
                             ))}
                           </div>
                         </div>
                       )}
-                    </motion.div>
+
+                      <div className="flex gap-4">
+                        <motion.button
+                          onClick={() => handlePurchase(selectedProduct)}
+                          className="primary-button-hover flex-1 py-4"
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                        >
+                          <div className="liquid-glass-bg-hover"></div>
+                          <span className="relative z-10">구매하기</span>
+                        </motion.button>
+                        
+                        <motion.button
+                          onClick={() => handleLike(selectedProduct.id)}
+                          className="standard-button p-4"
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                        >
+                          <div className="liquid-glass-bg-hover"></div>
+                          <svg className="w-6 h-6 relative z-10" fill={selectedProduct.isLiked ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                          </svg>
+                        </motion.button>
+                      </div>
+
+                      <motion.button
+                        onClick={handleBackToProducts}
+                        className="standard-button w-full py-3"
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                      >
+                        <div className="liquid-glass-bg-hover"></div>
+                        <span className="relative z-10">← 제품 목록으로 돌아가기</span>
+                      </motion.button>
+                    </div>
                   </div>
                 </motion.div>
               </div>
@@ -1067,32 +1070,43 @@ export default function App() {
           )}
 
           {/* === 인증 페이지들 === */}
-          
-          {/* 로그인 페이지 */}
           {currentSection === 'login' && (
-            <LoginPage
+            <motion.div
               key="login"
-              onLogin={handleLogin}                    // 로그인 핸들러 전달
-              onNavigate={handleNavigation}           // 네비게이션 함수 전달
-              isLoading={authLoading}                 // 인증 로딩 상태 전달
-              error={authError}                       // 인증 에러 메시지 전달
-            />
+              variants={premiumPageVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="pt-20"
+            >
+              <LoginPage
+                onLogin={handleLogin}                 // 로그인 핸들러
+                onNavigateToSignup={() => handleNavigation('signup')} // 회원가입 페이지로 이동
+                isLoading={authLoading}               // 로딩 상태
+                error={authError}                     // 에러 메시지
+              />
+            </motion.div>
           )}
 
-          {/* 회원가입 페이지 */}
           {currentSection === 'signup' && (
-            <SignupPage
+            <motion.div
               key="signup"
-              onSignup={handleSignup}                 // 회원가입 핸들러 전달
-              onNavigate={handleNavigation}           // 네비게이션 함수 전달
-              isLoading={authLoading}                 // 인증 로딩 상태 전달
-              error={authError}                       // 인증 에러 메시지 전달
-            />
+              variants={premiumPageVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="pt-20"
+            >
+              <SignupPage
+                onSignup={handleSignup}               // 회원가입 핸들러
+                onNavigateToLogin={() => handleNavigation('login')} // 로그인 페이지로 이동
+                isLoading={authLoading}               // 로딩 상태
+                error={authError}                     // 에러 메시지
+              />
+            </motion.div>
           )}
 
           {/* === 대시보드 페이지들 === */}
-          
-          {/* 통합 대시보드 페이지 (역할별 분기 포함) */}
           {(currentSection === 'orders' || currentSection === 'favorites' || currentSection === 'profile' || currentSection === 'subscription' ||
             currentSection === 'designer-analytics' || currentSection === 'designer-projects' || currentSection === 'designer-forms' || 
             currentSection === 'designer-earnings' || currentSection === 'designer-profile') && (
@@ -1126,48 +1140,37 @@ export default function App() {
                     onRevisionRequest={handleRevisionRequest} // 수정 요청 핸들러
                     revisionRequests={revisionRequests}  // 수정 요청 목록
                     projectRequests={projectRequests}    // 프로젝트 요청 목록
-                    designerQuestions={designerQuestions} // 디자이너 질문 목록
+                    onProjectQuestion={handleDesignerQuestion}    // 디자이너 질문 핸들러
+                    onProjectDecision={handleProjectDecision}     // 프로젝트 결정 핸들러
+                    onCustomFormCreate={() => setIsCustomFormCreatorOpen(true)} // 커스텀 폼 생성
                     customForms={customForms}            // 커스텀 폼 목록
-                    onDesignerQuestion={handleDesignerQuestion} // 디자이너 질문 핸들러
-                    onProjectDecision={handleProjectDecision}   // 프로젝트 결정 핸들러
+                    designerQuestions={designerQuestions} // 디자이너 질문 목록
                   />
                 </motion.div>
               </div>
             </motion.div>
           )}
 
-          {/* === 포트폴리오 업로드 페이지 (디자이너 전용) === */}
-          {currentSection === 'portfolio-upload' && (
-            <PortfolioUploadPage
-              key="portfolio-upload"
-              onNavigate={handleNavigation}           // 네비게이션 함수 전달
-              user={user}                            // 사용자 정보 전달
-              onBackToDashboard={handleBackToDashboard} // 대시보드로 돌아가기 핸들러
-            />
-          )}
-
         </AnimatePresence>
 
         {/* =====================================
-            모달 시스템 (전역 오버레이)
+            모달 컴포넌트들 (전역 오버레이)
             ===================================== */}
 
-        {/* === 기존 모달들 === */}
-        
-        {/* 스타일 선택 모달 - 제품 구매 시 스타일을 선택하��� 모달 */}
+        {/* 스타일 선택 모달 - 제품 구매 시 스타일을 선택하는 모달 */}
         {isStyleSelectionOpen && selectedProductForPurchase && (
           <StyleSelectionModal
-            product={selectedProductForPurchase}      // 구매할 제품 정보
-            isOpen={isStyleSelectionOpen}            // 모달 열림 상태
-            onClose={() => {                         // 모달 닫기 핸들러
-              setIsStyleSelectionOpen(false);        // 모달 상태 false로 변경
-              setSelectedProductForPurchase(null);   // 선택된 제품 초기화
+            product={selectedProductForPurchase}     // 선택된 제품
+            isOpen={isStyleSelectionOpen}           // 모달 열림 상태
+            onClose={() => {                        // 모달 닫기 핸들러
+              setIsStyleSelectionOpen(false);       // 모달 상태 false로 변경
+              setSelectedProductForPurchase(null);  // 선택된 제품 초기화
             }}
-            onStyleSelect={handleStyleSelection}     // 스타일 선택 완료 핸들러
+            onConfirm={handleStyleSelection}         // 스타일 선택 완료 핸들러
           />
         )}
 
-        {/* 수정 요청 모달 - 구매한 디자인의 수정을 요청하는 모달 */}
+        {/* 수정 요청 모달 - 완료된 주문에 대해 수정을 요청하는 모달 */}
         {isRevisionRequestOpen && selectedOrderForRevision && (
           <RevisionRequestModal
             order={selectedOrderForRevision}         // 수정 요청 대상 주문
@@ -1177,6 +1180,7 @@ export default function App() {
               setSelectedOrderForRevision(null);     // 선택된 주문 초기화
             }}
             onSubmit={handleRevisionSubmit}          // 수정 요청 제출 핸들러
+            revisionRequests={revisionRequests}      // 수정 요청 목록
           />
         )}
 
@@ -1228,8 +1232,8 @@ export default function App() {
         {isCustomFormCreatorOpen && (
           <CustomFormCreatorModal
             isOpen={isCustomFormCreatorOpen}         // 모달 열림 상태
-            onClose={() => setIsCustomFormCreatorOpen(false)} // ���달 닫기 핸들러
-            onSubmit={handleCustomFormCreate}        // 커스텀 �� 생성 핸들러
+            onClose={() => setIsCustomFormCreatorOpen(false)} // 모달 닫기 핸들러
+            onSubmit={handleCustomFormCreate}        // 커스텀 폼 생성 핸들러
             designer={user}                         // 폼 제작자 디자이너 정보
           />
         )}
