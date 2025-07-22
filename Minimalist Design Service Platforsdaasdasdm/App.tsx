@@ -439,7 +439,7 @@ export default function App() {
       // 테스트 계정 확인
       const testAccount = TEST_ACCOUNTS.find(account => account.email === email);
       
-      if (testAccount && password === 'test123') {
+      if (testAccount && password === testAccount.password) {
         // 테스트 계정으로 로그인
         const userData: User = {
           id: testAccount.email,
